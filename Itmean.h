@@ -9,7 +9,7 @@ using namespace std;
 class IterativeMean { //Creates a class framework for building child means using recursive operations
 	protected:
 		IterativeMean() {} //Iterative mean is not a complete class and should not be instantiated.
-		vector<double> raw; //Data to be averaged is stored here.
+		vector<double> raw; //Data to be averaged.
 		unsigned int iteration=0; //Number of iterations gone through
 		double precision=0.000001; //Precision to which mean should be calculated.
 		double mean; //The working mean, updated each iteration.
@@ -57,7 +57,8 @@ class AGM:public IterativeMean { //The Arithmetic-Geometric Mean is an iterative
 			//This could be made faster for cases with a zero by returning the geometric mean.
 		virtual void reset() { a[0]=geometric_mean(raw); a[1]=arithmetic_mean(raw); } //The initial means are taken from the data.
 	public:
-		AGM(vector<double> data):a(2,0) { raw=data; }
+		AGM() {}
+		AGM(vector<double>* input):a(2,0) { raw=*input; }
 		double arithmetic_mean(vector<double> data);
 		double geometric_mean(vector<double> data);
 };
@@ -82,7 +83,7 @@ class ClocksAtSea:public IterativeMean { //An experimental mean based on the ide
 		virtual double step_average();
 		virtual void reset() { set_times.assign(raw.size(),0); }
 	public:
-		ClocksAtSea(vector<double> data) { raw=data; }
+		ClocksAtSea(vector<double>* input) { raw=*input; }
 };
 
 double ClocksAtSea::step_average() { //Calcluate the arithmetic mean of all but the furthest outlying set_times element, and set that element to the new average.
@@ -98,18 +99,79 @@ double ClocksAtSea::step_average() { //Calcluate the arithmetic mean of all but 
 	}
 	//Find the greatest difference from the naive mean, remove it from the average, and set the corresponding element to the new average.
 	double new_mean;
-	if(abs(*max_element(set_times.begin(),set_times.end())-naivmean)>abs(*min_element(set_times.begin(),set_times.end())-naivmean)) {
-		new_mean=(naivmean*set_times.size()-*max_element(set_times.begin(),set_times.end()))/(set_times.size()-1);
-		*max_element(set_times.begin(),set_times.end())=new_mean;
+	auto set_max=max_element(set_times.begin(),set_times.end());
+	auto set_min=min_element(set_times.begin(),set_times.end());
+	if(abs(*set_max-naivmean)>abs(*set_min-naivmean)) {
+		new_mean=(naivmean*set_times.size()-*set_max)/(set_times.size()-1);
+		*set_max=new_mean;
 	}
-	else if(abs(*max_element(set_times.begin(),set_times.end())-naivmean)<abs(*min_element(set_times.begin(),set_times.end())-naivmean)) {
-		new_mean=(naivmean*set_times.size()-*min_element(set_times.begin(),set_times.end()))/(set_times.size()-1);
-		*min_element(set_times.begin(),set_times.end())=new_mean;
+	else if(abs(*set_max-naivmean)<abs(*set_min-naivmean)) {
+		new_mean=(naivmean*set_times.size()-*set_min)/(set_times.size()-1);
+		*set_min=new_mean;
 	}
 	else { //If there are two furthest elements equidistant in opposite directions, reset them both.
 		new_mean=naivmean;
-		*max_element(set_times.begin(),set_times.end())=new_mean;
-		*min_element(set_times.begin(),set_times.end())=new_mean;
+		*set_max=new_mean;
+		*set_min=new_mean;
 	}
 	return new_mean/iteration;
+}
+
+class ExtendedAGM { //An AGM-style mean - extended to accept negative values!
+	protected:
+		vector<double> raw; //Data to be averaged.
+		double precision=0.000001; //Precision to which mean should be calculated.
+		double mean;
+		AGM negAGM;
+		AGM posAGM;
+		void initialize(); //Prep for computation
+	public:
+		ExtendedAGM(vector<double>* input) { raw=*input; }
+		void set_precision(double precis)
+			{ precision=precis; }
+		double calculate();
+		double calculate(unsigned int iteration_depth);
+		unsigned int size()
+			{ return raw.size(); }
+		double operator[] (unsigned int i)
+			{ return raw[i]; }
+};
+
+void ExtendedAGM::initialize() { //AGM iteration can't handle negative values, so split the Real line.
+	vector<double> negs;
+	vector<double> poss;
+	for(unsigned int i=0;i<raw.size();i++) {
+		if(raw[i]>0) {
+			poss.push_back(raw[i]);
+		}
+		else if(raw[i]<0) {
+			negs.push_back(-raw[i]);
+		}
+		else if(raw[i]==0) {
+			poss.push_back(raw[i]);
+			negs.push_back(raw[i]);
+		}
+	}
+	AGM negAGM(&negs);
+	AGM posAGM(&poss);
+	this->negAGM=negAGM;
+	this->posAGM=posAGM;
+}
+
+double ExtendedAGM::calculate() {
+	initialize();
+	negAGM.set_precision(precision);
+	posAGM.set_precision(precision);
+	double negmean=negAGM.calculate();
+	double posmean=posAGM.calculate();
+	this->mean=posmean-negmean;
+	return this->mean;
+}
+
+double ExtendedAGM::calculate(unsigned int iteration_depth) {
+	initialize();
+	double negmean=negAGM.calculate(iteration_depth);
+	double posmean=posAGM.calculate(iteration_depth);
+	this->mean=posmean-negmean;
+	return this->mean;
 }
