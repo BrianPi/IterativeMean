@@ -13,7 +13,7 @@ class IterativeMean { //Creates a class framework for building child means using
 		unsigned int iteration=0; //Number of iterations gone through
 		double precision=0.000001; //Precision to which mean should be calculated.
 		double mean; //The working mean, updated each iteration.
-		virtual double step_average() {} //This function should be defined to represent a single averaging step in the derived class.
+		virtual double step_average()=0; //This function should be defined to represent a single averaging step in the derived class.
 		virtual void reset() { return; } //This function should be defined to prepare the derived class for averaging the data from the first iteration.
 	public:
 		void set_precision(double precis)
@@ -28,6 +28,8 @@ class IterativeMean { //Creates a class framework for building child means using
 			{ return raw[i]; }
 		unsigned int iterations()
 			{ return iteration; }
+		double arithmetic_mean(vector<double> data); //Define these utility means for derived classes
+		double geometric_mean(vector<double> data);
 };
 
 double IterativeMean::calculate() {
@@ -47,6 +49,18 @@ double IterativeMean::calculate(unsigned int iteration_depth) {
 	return mean;
 }
 
+double IterativeMean::arithmetic_mean(vector<double> data) {
+	double sum_all=accumulate(data.begin(),data.end(),0.0);
+	double mean=sum_all/data.size();
+	return mean;
+}
+
+double IterativeMean::geometric_mean(vector<double> data) {
+	double product_all=accumulate(data.begin(),data.end(),1.0,multiplies<double>());
+	double mean=pow(product_all,(1.0/data.size()));
+	return mean;
+}
+
 
 class AGM:public IterativeMean { //The Arithmetic-Geometric Mean is an iterative classic!
 	private:
@@ -59,21 +73,20 @@ class AGM:public IterativeMean { //The Arithmetic-Geometric Mean is an iterative
 	public:
 		AGM() {}
 		AGM(vector<double>* input):a(2,0) { raw=*input; }
-		double arithmetic_mean(vector<double> data);
-		double geometric_mean(vector<double> data);
 };
 
-double AGM::arithmetic_mean(vector<double> data) {
-	double sum_all=accumulate(data.begin(),data.end(),0.0);
-	double mean=sum_all/data.size();
-	return mean;
-}
-
-double AGM::geometric_mean(vector<double> data) {
-	double product_all=accumulate(data.begin(),data.end(),1.0,multiplies<double>());
-	double mean=pow(product_all,(1.0/data.size()));
-	return mean;
-}
+class Geothdian:public IterativeMean { //https://xkcd.com/2435/
+	//Pretty similar to the AGM, honestly!
+	private:
+		vector<double> a;
+	protected:
+		virtual double step_average()
+			{ sort(a.begin(),a.end()); double med_next=a[1]; double a1_next=arithmetic_mean(a); a[0]=geometric_mean(a); a[1]=a1_next; a[2]=med_next; return med_next; }
+		virtual void reset() { sort(raw.begin(),raw.end()); a[0]=geometric_mean(raw); a[1]=arithmetic_mean(raw); if(raw.size()%2){ a[2]=raw[raw.size()/2]; }else{ a[2]=double(raw[raw.size()/2]+raw[(raw.size()/2)+1])/2.0; } } //Almost long enough to consider expanding.
+	public:
+		Geothdian() {}
+		Geothdian(vector<double>* input):a(3,0) { raw=*input; } //Geothdian will sort the passed in vector by size.
+};
 
 
 class ClocksAtSea:public IterativeMean { //An experimental mean based on the idea of collective indication, e.g. time by clocks at sea.
